@@ -1,8 +1,21 @@
+- [Emotion SDK](#emotion-sdk)  
+    - [Prerequistes](#prerequistes)    
+    - [Usage](#usage)        
+        - [Parameters:](#parameters)        
+        - [Method](#method)            
+            - [train()](#train)            
+            - [eval()](#eval)            
+            - [recognize()](#recognize)            
+            - [batch_recognize()](#batch_recognize)    
+    - [Dataset](#dataset)        
+        - [Image](#image)        
+        - [Video](#video)    
+    - [Model](#model)        
+        - [Pretrain](#pretrain)
+
 # Emotion SDK
 
 This emotion sdk based on [PyTorch](/[https:/pytorch.org](https:/pytorch.org/)) could be used for both video and image face emotion recognition.
-
-<!-- TOC -->autoauto- [Emotion SDK](#emotion-sdk)auto    - [Prerequistes](#prerequistes)auto    - [Usage](#usage)auto        - [Parameters:](#parameters)auto        - [Method](#method)auto            - [train()](#train)auto            - [eval()](#eval)auto            - [recognize()](#recognize)auto            - [batch_recognize()](#batch_recognize)auto    - [Dataset](#dataset)auto        - [Image](#image)auto        - [Video](#video)auto    - [Model](#model)auto        - [Pretrain](#pretrain)autoauto<!-- /TOC -->
 
 ## Prerequistes
 
