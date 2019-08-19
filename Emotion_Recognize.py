@@ -1,4 +1,5 @@
 import torch
+from torch import tensor
 import torch.nn as nn
 import torch.optim as optim
 from models.DCNN import get_DLP_CNN,DLP_Loss
@@ -7,15 +8,15 @@ from torch.utils.data import dataloader
 from tensorboardX import SummaryWriter
 class Emotion_Recognize():
 
-    def __init__(self,Video=True,pretrain=True,nGPU=0):
+    def __init__(self,Video=True,pretrain=True,nGPU=0,emotion_No=7):
         super(Emotion_Recognize, self).__init__()
         self.video = Video
         self.nGPU = nGPU
         if self.video:
-            self.model = get_combNetwork(7,pretrain=pretrain)
+            self.model = get_combNetwork(emotion_No,pretrain=pretrain)
             self.criterion = nn.CrossEntropyLoss()
         else:
-            self.model = get_DLP_CNN(7,pretrain=pretrain)
+            self.model = get_DLP_CNN(emotion_No,pretrain=pretrain)
             self.criterion = DLP_Loss()
         self.writer = SummaryWriter('log')
         if self.nGPU > 0:
@@ -25,7 +26,7 @@ class Emotion_Recognize():
             else:
                 self.model = self.model.cuda()
 
-    def train(self,train_loader:dataloader,test_loader:dataloader,epochs:int,learn_rate=0.00003,momentum=0.9, weight_decay=0.0005):
+    def train(self,train_loader:dataloader,test_loader:dataloader,epochs:int,learn_rate=0.00003,momentum=0.9, weight_decay=0.0005,decay=30):
         '''
 
         :param train_loader:
@@ -36,6 +37,7 @@ class Emotion_Recognize():
         :param weight_decay:
         :return:
         '''
+        self.learn_rate = learn_rate
         self.optimizer = optim.SGD(
             filter(lambda p: p.requires_grad, self.model.parameters()),
             learn_rate,
@@ -53,7 +55,7 @@ class Emotion_Recognize():
         max_acc = 0
         checkpoint = dict()
         for epoch in range(1,epochs+1):
-            self.learning_rate(epoch)
+            self.learning_rate(epoch,decay=decay)
 
             for i, (input_tensor, target) in enumerate(train_loader):
 
@@ -63,9 +65,14 @@ class Emotion_Recognize():
 
                 batch_size = target.size(0)
 
-                output = model(input_tensor)
+                if self.video:
 
-                loss = self.criterion(output, target)
+                    output = model(input_tensor)
+                    loss = self.criterion(output, target)
+
+                else:
+                    output,feature = model(input_tensor)
+                    loss = self.criterion(output,feature,target)
 
                 acc, acc_top3 = self.accuracy(output.data, target, (1,3))
 
@@ -77,7 +84,7 @@ class Emotion_Recognize():
                 total += batch_size
 
                 self.optimizer.zero_grad()
-                loss.backword()
+                loss.backward()
 
             loss_avg /= total
             acc_avg /= total
@@ -113,9 +120,12 @@ class Emotion_Recognize():
                 target = target.cuda()
             batch_size = target.size(0)
 
-            output = model(input_tensor)
+            if self.video:
+                output = model(input_tensor)
+            else:
+                output,feature = model(input_tensor)
 
-            acc, acc_top3 = self.accuracy(output.data, target, (1, 3))
+            acc, acc_top3 = self.accuracy(output.data, target, (1,3))
 
             acc_avg += acc * batch_size
             acc_top3_avg += acc_top3 * batch_size
@@ -134,13 +144,13 @@ class Emotion_Recognize():
 
 
 
-    def recognize(self,input):
+    def recognize(self,input:tensor):
         model = self.model
         model.eval()
         if self.video:
             pred = model(input)
         else:
-            _,pred = model(input)
+            pred,_ = model(input)
         pred = pred.topk(1,dim=1)
         return int(pred[1])
 
@@ -148,23 +158,24 @@ class Emotion_Recognize():
         model = self.model
         model.eval()
         results = dict()
-        for i, (input_tensor,filename)in enumerate(input_loader):
+        for i, (input_tensor,filenames)in enumerate(input_loader):
             if self.nGPU > 0:
                 input_tensor = input_tensor.cuda()
             batch_size = input_tensor.size()[0]
             if self.video:
-                pred = model(input_tensor)
+                preds = model(input_tensor)
             else:
-                _,pred = model(input_tensor)
-            results[filename] = pred.topk(1,dim=1)[1]
+                preds,_ = model(input_tensor)
+            for filename,pred in zip(filenames,preds):
+                results[filename] = int(pred.topk(1,dim=0)[1])
         return results
 
-    def learning_rate(self,epoch):
-        self.decay = 0.1 ** ((epoch - 1) // self.args.decay)
+    def learning_rate(self,epoch,decay):
+        self.decay = 0.1 ** ((epoch - 1) // decay)
         learn_rate = self.learn_rate * self.decay
         if learn_rate < 1e-7:
             learn_rate = 1e-7
-        for param_group in self.optimizer.param_group:
+        for param_group in self.optimizer.param_groups:
             param_group['lr'] = learn_rate
 
     def accuracy(self, output, target, topk=(1,)):
@@ -179,7 +190,6 @@ class Emotion_Recognize():
         res = []
         for k in topk:
             correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
-            # print(correct_k)
 
             res.append(correct_k.mul_(100.0 / batch_size)[0])
         return res
